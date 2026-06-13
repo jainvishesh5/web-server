@@ -9,8 +9,60 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <vector>
+#include <unordered_map>
+#include <sstream>
 
 using namespace std;
+
+struct HttpRequest{
+    string method;
+    string path;
+    string version;
+    unordered_map <string , string> header;
+};
+
+HttpRequest parseRequest(const string &request){
+    HttpRequest req;
+
+    stringstream ss(request);
+    string token;
+    vector <string> headers;
+    while(getline(ss , token , '\n')){
+        if(!token.empty() && token.back() == '\r'){
+            token.pop_back();
+        }
+        headers.push_back(token);
+    }
+
+    if(headers.empty()){
+        cerr << "empty request\n";
+        return{};
+    }
+    
+    stringstream request_line(headers[0]);
+    vector <string> tokens;
+    while(getline(request_line , token , ' ')){
+        tokens.push_back(token);
+    }
+    if(tokens.size() < 3){
+        cerr << "invalid request";
+        return{};
+    }
+    req.method = tokens[0];
+    req.path = tokens[1];
+    req.version = tokens[2];
+
+    headers.erase(headers.begin());
+    
+    for(const string& s : headers){
+        if(s.empty())continue;
+        size_t key_index = s.find(':');
+        if(key_index == string::npos)continue;
+        string key = s.substr(0 , key_index);
+        req.header[key] = s.substr(key_index + 2);
+    }
+    return req;
+}
 
 int main(){
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -63,46 +115,23 @@ int main(){
             close(client_fd);
             continue;
         }
-        
+
         buffer[bytes_received] = '\0';
-        size_t request_index;
-        string request(buffer);
-        if((request_index = request.find("\r\n"))!= string::npos){
-            request = request.substr(0 , request_index);
-        }
-        else{
-            cerr << "invalid HTTP request...";
-            close(client_fd);
-            continue;
-        }
 
-        string request_parameters[3] = {"", "" , ""};
+        string raw_request(buffer);
 
-        string* request_ptr = request_parameters;
-        for(size_t i=0 ; i<request.size() ; i++){
-            if(request[i] == ' '){
-                if(request_ptr != &request_parameters[2]){
-                    request_ptr++;
-                }
-                continue;
-            }
-            *request_ptr += request[i];
-        }
-
-        string method = request_parameters[0];
-        string path = request_parameters[1];
-        string version = request_parameters[2];
-
-        cout<<method<<"\n" << path <<"\n" << version << "\n";
+        HttpRequest request = parseRequest(raw_request);
 
         string body;
         string status;
+        string content_type = "text/plain";
+        
 
-        if(path == "/"){
+        if(request.path == "/"){
             body = "home page";
             status = "HTTP/1.1 200 OK";
         }
-        else if(path == "/hello"){
+        else if(request.path == "/hello"){
             body = "hello vishesh";
             status = "HTTP/1.1 200 OK";
         }
@@ -111,7 +140,12 @@ int main(){
             status = "HTTP/1.1 404 Not Found";
         }
 
-        string response = status + "\r\n\r\n" + body +"\n";
+        size_t content_len = body.size();
+
+        string response = status + "\r\n" +
+                         "content-type: " + content_type +"\r\n" +
+                         "content-length: " + to_string(content_len) + "\r\n\r\n"+
+                         body;
         
         int bytes_sent;                  
         if((bytes_sent = send(client_fd , response.c_str() , response.size() , 0))<=0){
@@ -125,3 +159,10 @@ int main(){
     }
     return 0;
 }
+
+
+
+
+
+
+
