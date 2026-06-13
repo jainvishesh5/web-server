@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <vector>
 
 using namespace std;
 
@@ -43,7 +44,6 @@ int main(){
         int client_fd;
         if((client_fd = accept(server_fd , (sockaddr*)&client_addr , &client_addr_len ))<0){
             perror("accept");
-            close(client_fd);
             continue;
         }
 
@@ -65,11 +65,53 @@ int main(){
         }
         
         buffer[bytes_received] = '\0';
-        cout<<buffer<<"\n";
+        size_t request_index;
+        string request(buffer);
+        if((request_index = request.find("\r\n"))!= string::npos){
+            request = request.substr(0 , request_index);
+        }
+        else{
+            cerr << "invalid HTTP request...";
+            close(client_fd);
+            continue;
+        }
 
-        string response = "HTTP/1.1 200 OK\r\n"
-                          "\r\n"
-                          "Hello World!\n";
+        string request_parameters[3] = {"", "" , ""};
+
+        string* request_ptr = request_parameters;
+        for(size_t i=0 ; i<request.size() ; i++){
+            if(request[i] == ' '){
+                if(request_ptr != &request_parameters[2]){
+                    request_ptr++;
+                }
+                continue;
+            }
+            *request_ptr += request[i];
+        }
+
+        string method = request_parameters[0];
+        string path = request_parameters[1];
+        string version = request_parameters[2];
+
+        cout<<method<<"\n" << path <<"\n" << version << "\n";
+
+        string body;
+        string status;
+
+        if(path == "/"){
+            body = "home page";
+            status = "HTTP/1.1 200 OK";
+        }
+        else if(path == "/hello"){
+            body = "hello vishesh";
+            status = "HTTP/1.1 200 OK";
+        }
+        else{
+            body = "page not found";
+            status = "HTTP/1.1 404 Not Found";
+        }
+
+        string response = status + "\r\n\r\n" + body +"\n";
         
         int bytes_sent;                  
         if((bytes_sent = send(client_fd , response.c_str() , response.size() , 0))<=0){
@@ -81,6 +123,5 @@ int main(){
 
         close(client_fd);
     }
-
     return 0;
 }
