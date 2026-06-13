@@ -1,0 +1,17 @@
+# Compiled Binaries
+*.out
+*.exe
+*.o
+*.a
+*.so
+
+# Build directories (if you use CMake later)
+build/
+.cmake/
+CMakeCache.txt
+CMakeFiles/
+
+# OS and Editor files
+.DS_Store
+.vscode/
+.idea/
