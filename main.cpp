@@ -20,12 +20,19 @@ struct HttpRequest{
     string path;
     string version;
     unordered_map <string , string> header;
+    string body;
 };
 
 HttpRequest parseRequest(const string &request){
     HttpRequest req;
+    size_t body_index;
+    string header_part = request;
+    if((body_index = request.find("\r\n\r\n")) != string::npos){
+        req.body = request.substr(body_index + 4);
+        header_part = request.substr(0 , body_index);
+    }
 
-    stringstream ss(request);
+    stringstream ss(header_part);
     string token;
     vector <string> headers;
     while(getline(ss , token , '\n')){
@@ -62,7 +69,6 @@ HttpRequest parseRequest(const string &request){
         string key = s.substr(0 , key_index);
         req.header[key] = s.substr(key_index + 2);
     }
-    cout << "PATH: [" << req.path << "]\n";
     return req;
 }
 
@@ -104,23 +110,30 @@ int main(){
         cout<< "client connected...\n";
 
         char buffer[1024];
-        int bytes_received;
-
-        if((bytes_received = recv(client_fd , buffer , sizeof(buffer)-1 ,0))<0){
-            perror("recv");
-            close(client_fd);
-            continue;
-        }
+        ssize_t bytes_received;
+        bool proceed = true;
+        string raw_request = "";
+        while(true){
+            if((bytes_received = recv(client_fd , buffer , sizeof(buffer)-1 ,0))<0){
+                perror("recv");
+                close(client_fd);
+                proceed = false;
+                break;
+            }
         
-        if(bytes_received == 0){
-            cout << "client disconnected...\n";
-            close(client_fd);
-            continue;
+            if(bytes_received == 0){
+                cout << "client disconnected...\n";
+                close(client_fd);
+                proceed = false;
+                break;
+            }
+            raw_request.append(buffer , bytes_received);
+            if(raw_request.find("\r\n\r\n") != string::npos){
+                break;
+            }
+            
         }
-
-        buffer[bytes_received] = '\0';
-
-        string raw_request(buffer);
+        if(!proceed)continue;
 
         HttpRequest request = parseRequest(raw_request);
 
