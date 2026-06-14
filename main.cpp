@@ -11,6 +11,7 @@
 #include <vector>
 #include <unordered_map>
 #include <sstream>
+#include <fcntl.h>
 
 using namespace std;
 
@@ -61,6 +62,7 @@ HttpRequest parseRequest(const string &request){
         string key = s.substr(0 , key_index);
         req.header[key] = s.substr(key_index + 2);
     }
+    cout << "PATH: [" << req.path << "]\n";
     return req;
 }
 
@@ -134,6 +136,44 @@ int main(){
         else if(request.path == "/hello"){
             body = "hello vishesh";
             status = "HTTP/1.1 200 OK";
+        }
+        else if(request.path.find("/echo/") == 0){
+            body = request.path.substr(6);
+            status = "HTTP/1.1 200 OK";
+        }
+        else if(request.path.find("/user-agent") == 0){
+            body = request.header["User-Agent"];
+            status = "HTTP/1.1 200 OK";
+        }
+        else if(request.path.find("/files/") == 0){
+            string filename = request.path.substr(7);
+            string filepath = "files/" + filename;
+            int fd = open(filepath.c_str() , O_RDONLY);
+            if(fd == -1){
+                body = "file not found";
+                status = "HTTP/1.1 404 Not Found";
+            }
+            else{
+                char buffer[1024];
+                ssize_t bytes_read;
+                body = "";
+                status = "HTTP/1.1 200 OK";
+                while(true){
+                    if((bytes_read = read(fd , buffer , sizeof(buffer)))<0){
+                        perror("read");
+                        body = "read failed";
+                        status = "HTTP/1.1 500 Internal Server Error";
+                        break;
+                    }
+                    else if(bytes_read == 0){
+                        break;
+                    }
+                    else{
+                        body += string(buffer , bytes_read);
+                    }
+                }
+                close(fd);
+            }
         }
         else{
             body = "page not found";
