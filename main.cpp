@@ -129,9 +129,15 @@ int main(){
             }
             raw_request.append(buffer , bytes_received);
             if(raw_request.find("\r\n\r\n") != string::npos){
-                break;
-            }
-            
+                HttpRequest request = parseRequest(raw_request);
+                auto it = request.header.find("Content-Length");
+                if(it == request.header.end())break;
+                size_t content_length = stoul(it->second);
+                if(content_length > 0){
+                    if(request.body.size() >= content_length)break;
+                }
+                else{break;}
+            }    
         }
         if(!proceed)continue;
 
@@ -141,7 +147,26 @@ int main(){
         string status;
         string content_type = "text/plain";
         
-
+        if ((request.method == "POST") && request.path.find("/files/") == 0){
+            string filename = request.path.substr(7);
+            string filepath = "files/" + filename;
+            int fd = open(filepath.c_str() , O_WRONLY|O_CREAT|O_TRUNC , 0644);
+            if(fd == -1){
+                perror("open");
+                status = "HTTP/1.1 500 Internal Server Error";
+                body = "open failed";
+            }
+            else {if(
+            write(fd , request.body.c_str(), request.body.size()) <0){
+                perror("write");
+                status = "HTTP/1.1 500 Internal Server Error";
+                body = "write failed";
+            }else{
+            status = "HTTP/1.1 201 Created";
+            body = "";}}
+            close(fd);
+        }
+        else if(request.method == "GET"){
         if(request.path == "/"){
             body = "home page";
             status = "HTTP/1.1 200 OK";
@@ -188,16 +213,19 @@ int main(){
                 close(fd);
             }
         }
+    }
         else{
             body = "page not found";
             status = "HTTP/1.1 404 Not Found";
         }
 
+        
+
         size_t content_len = body.size();
 
         string response = status + "\r\n" +
-                         "content-type: " + content_type +"\r\n" +
-                         "content-length: " + to_string(content_len) + "\r\n\r\n"+
+                         "Content-Type: " + content_type +"\r\n" +
+                         "Content-Length: " + to_string(content_len) + "\r\n\r\n"+
                          body;
         
         int bytes_sent;                  
